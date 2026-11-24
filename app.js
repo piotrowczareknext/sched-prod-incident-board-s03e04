@@ -7,9 +7,11 @@ const empty = document.querySelector('[data-testid="empty"]');
 const list = document.querySelector('[data-testid="incident-list"]');
 const panel = document.querySelector('[data-testid="incident-panel"]');
 const incidents = new Map();
+const rowElements = new Map();
 const acked = new Set();
 const pendingAcks = new Set();
 let selectedId = null;
+let hasRenderedRows = false;
 
 document.querySelector('meta[name="build"]').content = BUILD_SHA;
 document.querySelector('[data-testid="build-sha"]').textContent = BUILD_SHA;
@@ -50,54 +52,73 @@ function showError(message) {
   error.hidden = false;
 }
 
+function createRow(incident) {
+  const row = document.createElement('li');
+  row.dataset.testid = 'incident-row';
+  row.dataset.id = incident.id;
+  row.tabIndex = 0;
+  row.setAttribute('role', 'button');
+  row.addEventListener('click', () => openPanel(incident.id));
+  row.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      openPanel(incident.id);
+    }
+  });
+  return row;
+}
+
+function updateRow(row, incident) {
+  row.className = `row ${incident.severity}`;
+  row.replaceChildren();
+  const id = document.createElement('span');
+  id.className = 'id';
+  id.textContent = incident.id;
+  row.append(id);
+
+  const severity = document.createElement('span');
+  severity.className = 'sev';
+  severity.textContent = incident.severity;
+  row.append(severity);
+
+  const summary = document.createElement('span');
+  summary.className = 'what';
+  summary.textContent = `${incident.service} · ${incident.region} · ${incident.summary}`;
+  row.append(summary);
+
+  const time = document.createElement('time');
+  time.dateTime = incident.openedAt;
+  time.textContent = formatOpenedAt(incident.openedAt);
+  row.append(time);
+
+  if (acked.has(incident.id)) {
+    const marker = document.createElement('span');
+    marker.dataset.testid = 'acked';
+    marker.className = 'acked';
+    marker.textContent = 'Acked';
+    row.append(marker);
+  }
+}
+
 function render() {
   const current = sortedIncidents();
-  list.replaceChildren();
+  const newRows = [];
 
   for (const incident of current) {
-    const row = document.createElement('li');
-    row.dataset.testid = 'incident-row';
-    row.dataset.id = incident.id;
-    row.className = `row ${incident.severity}`;
-    row.tabIndex = 0;
-    row.setAttribute('role', 'button');
-    row.addEventListener('click', () => openPanel(incident.id));
-    row.addEventListener('keydown', (event) => {
-      if (event.key === 'Enter' || event.key === ' ') {
-        event.preventDefault();
-        openPanel(incident.id);
-      }
-    });
-
-    const id = document.createElement('span');
-    id.className = 'id';
-    id.textContent = incident.id;
-    row.append(id);
-
-    const severity = document.createElement('span');
-    severity.className = 'sev';
-    severity.textContent = incident.severity;
-    row.append(severity);
-
-    const summary = document.createElement('span');
-    summary.className = 'what';
-    summary.textContent = `${incident.service} · ${incident.region} · ${incident.summary}`;
-    row.append(summary);
-
-    const time = document.createElement('time');
-    time.dateTime = incident.openedAt;
-    time.textContent = formatOpenedAt(incident.openedAt);
-    row.append(time);
-
-    if (acked.has(incident.id)) {
-      const marker = document.createElement('span');
-      marker.dataset.testid = 'acked';
-      marker.className = 'acked';
-      marker.textContent = 'Acked';
-      row.append(marker);
+    let row = rowElements.get(incident.id);
+    if (!row) {
+      row = createRow(incident);
+      rowElements.set(incident.id, row);
+      newRows.push(row);
     }
+    updateRow(row, incident);
+  }
 
-    list.append(row);
+  if (!hasRenderedRows) {
+    for (const row of current.map((incident) => rowElements.get(incident.id))) list.append(row);
+    hasRenderedRows = true;
+  } else {
+    for (const row of newRows.reverse()) list.prepend(row);
   }
 
   const hasIncidents = current.length > 0;
