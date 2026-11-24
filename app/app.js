@@ -5,9 +5,11 @@ const loader = document.querySelector('[data-testid="loader"]');
 const error = document.querySelector('[data-testid="error"]');
 const empty = document.querySelector('[data-testid="empty"]');
 const list = document.querySelector('[data-testid="incident-list"]');
+const panel = document.querySelector('[data-testid="incident-panel"]');
 const incidents = new Map();
 const acked = new Set();
 const pendingAcks = new Set();
+let selectedId = null;
 
 document.querySelector('meta[name="build"]').content = BUILD_SHA;
 document.querySelector('[data-testid="build-sha"]').textContent = BUILD_SHA;
@@ -57,6 +59,15 @@ function render() {
     row.dataset.testid = 'incident-row';
     row.dataset.id = incident.id;
     row.className = `row ${incident.severity}`;
+    row.tabIndex = 0;
+    row.setAttribute('role', 'button');
+    row.addEventListener('click', () => openPanel(incident.id));
+    row.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault();
+        openPanel(incident.id);
+      }
+    });
 
     const id = document.createElement('span');
     id.className = 'id';
@@ -84,14 +95,6 @@ function render() {
       marker.className = 'acked';
       marker.textContent = 'Acked';
       row.append(marker);
-    } else {
-      const button = document.createElement('button');
-      button.dataset.testid = 'ack';
-      button.type = 'button';
-      button.textContent = pendingAcks.has(incident.id) ? 'Acking...' : 'Ack';
-      button.disabled = pendingAcks.has(incident.id);
-      button.addEventListener('click', () => acknowledge(incident.id));
-      row.append(button);
     }
 
     list.append(row);
@@ -100,6 +103,7 @@ function render() {
   const hasIncidents = current.length > 0;
   empty.hidden = hasIncidents;
   list.hidden = !hasIncidents;
+  renderPanel();
 }
 
 function merge(page) {
@@ -107,6 +111,54 @@ function merge(page) {
     incidents.set(incident.id, { ...incidents.get(incident.id), ...incident });
   }
   render();
+}
+
+function renderPanel() {
+  panel.replaceChildren();
+  if (!selectedId || !incidents.has(selectedId)) {
+    panel.hidden = true;
+    delete panel.dataset.incidentId;
+    return;
+  }
+
+  const incident = incidents.get(selectedId);
+  panel.hidden = false;
+  panel.dataset.incidentId = incident.id;
+
+  const heading = document.createElement('h2');
+  heading.textContent = `Incident ${incident.id}`;
+  panel.append(heading);
+
+  const details = document.createElement('p');
+  details.textContent = `${incident.service} · ${incident.region} · ${incident.summary}`;
+  panel.append(details);
+
+  const time = document.createElement('time');
+  time.dateTime = incident.openedAt;
+  time.textContent = formatOpenedAt(incident.openedAt);
+  panel.append(time);
+
+  if (acked.has(incident.id)) {
+    const marker = document.createElement('p');
+    marker.dataset.testid = 'acked';
+    marker.className = 'acked';
+    marker.textContent = 'Acked';
+    panel.append(marker);
+    return;
+  }
+
+  const button = document.createElement('button');
+  button.dataset.testid = 'panel-ack';
+  button.type = 'button';
+  button.textContent = pendingAcks.has(incident.id) ? 'Acking...' : 'Ack';
+  button.disabled = pendingAcks.has(incident.id);
+  button.addEventListener('click', () => acknowledge(incident.id));
+  panel.append(button);
+}
+
+function openPanel(id) {
+  selectedId = id;
+  renderPanel();
 }
 
 async function acknowledge(id) {
