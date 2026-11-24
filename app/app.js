@@ -1,4 +1,4 @@
-import { ack, fetchIncidents } from './api.js';
+import { ack, fetchIncidents } from './api.js?v=s03e04-product-2';
 import { BUILD_SHA } from './config.js';
 
 const loader = document.querySelector('[data-testid="loader"]');
